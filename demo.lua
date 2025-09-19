@@ -1,6 +1,7 @@
 -- global
 GRAVITY = 1
 FRICTION = 0.75
+MAX_SEED = 6
 t=0
 
 -- animations --
@@ -13,7 +14,6 @@ idle_animation = {
 	h = 2,
 	loop = 1,
 }
-
 run_animation = {
 	id = 288,
 	num = 8,
@@ -23,7 +23,6 @@ run_animation = {
 	h = 2,
 	loop = 1,
 }
-
 jump_animation = {
 	id = 320,
 	num = 6,
@@ -33,7 +32,15 @@ jump_animation = {
 	h = 2,
 	loop = 0,
 }
-
+jump2_animation = {
+	id = 352,
+	num = 6,
+	speed = 4,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 0,
+}
 test_animation = {
 	id = 32,
 	num = 1,
@@ -51,30 +58,22 @@ player = {
 	h = 16,
 	dx = 0,
 	dy = 0,
-	s = 6,
-    j = 7,
+	s = 2,
+    j = 6,
     on_ground = false,
 	anim = idle_animation,
 	state = "idle",
 	counter = 0,
-
-    c = 0,
-    f = 0,
-    a = 256,
-    an = 4,
-    as = 16,
+	flip = 0,
 }
 
 function TIC()
 	cls()
 	map(0,0,30,17,0,0,-1,1)
 
-    --spr(32, player.x, player.y, 0, 1, player.f, 0, 2, 2)
-    player.counter = draw_object(player)
 	update_player()
-    --player.counter = draw_object(player)
-
-    --spr(32, player.x, player.y, 0, 1, player.f, 0, 2, 2)
+    player.counter = draw_object(player)
+	print("dx = " .. player.dx .. ", dy = " .. player.dy, 0, 0)
 
 	t=t+1
 end
@@ -82,8 +81,10 @@ end
 
 function player_input()
 	-- movement --
-	--if btnp(0) and player.on_ground == true then player.dy = -player.j end
-    if btn(0) then player.dy = -player.s end
+	if (btnp(0) or btnp(4)) and player.on_ground == true then 
+		player.dy = -player.j 
+	end
+    ---if btn(0) then player.dy = -player.s end
 	if btn(1) then player.dy = player.s end
 	if btn(2) then player.dx = -player.s end
 	if btn(3) then player.dx = player.s end
@@ -95,56 +96,50 @@ function player_states()
 		new_state = "jump"
     elseif player.dx == 0 then
 		new_state = "idle"
-    elseif player.dx > 0 then
+    elseif player.dx ~= 0 then
 		new_state = "run"
-        player.f = 0
-    elseif player.dx < 0 then
-		new_state = "run"
-        player.f = 1
     end
 
 	if player.state ~= new_state then
-		change_state(new_state)
+		if new_state == "idle" then
+			player.counter = 0
+			player.anim = idle_animation
+			player.state = "idle"
+		elseif new_state == "run" then
+			player.counter = 0
+			player.anim = run_animation
+			player.state = "run"
+		elseif new_state == "jump" then
+			player.counter = 0
+			player.anim = jump_animation
+			player.state = "jump"
+		end
 	end
+
+	if player.dx < 0 then
+		player.flip = 1
+	elseif player.dx > 0 then
+		player.flip = 0
+	end
+
 end
 
-function change_state(state)
-	if state == "idle" then
-		player.counter = 0
-		player.anim = idle_animation
-		player.state = "idle"
-	elseif state == "run" then
-		player.counter = 0
-		player.anim = run_animation
-		player.state = "run"
-	elseif state == "jump" then
-		player.counter = 0
-		player.anim = jump_animation
-		player.state = "jump"
-	end
-end
 
 function update_player()
     player_input()
+	gravity(player)
     player_states()
 
-    collision_new(player)
-    -- check_collision_x(player)
-    -- check_collision_y(player)
+	collision_x(player)
+	player.x = player.x + player.dx
+	collision_y(player)
+	player.y = player.y + player.dy
 
-    player.x = player.x + player.dx
-    player.y = player.y + player.dy
-
-    player.dx = 0
-    player.dy = 0
-
-	--gravity(player)
 end
 
 function draw_object(obj)
 	if t % obj.anim.speed == 0 then
 		obj.counter = obj.counter + 1
-
 		if obj.anim.loop == 1 then
 			obj.counter = obj.counter % obj.anim.num
 		elseif obj.counter > obj.anim.num -1 then
@@ -155,9 +150,8 @@ function draw_object(obj)
 	local offset_rows = math.floor(obj.anim.id/(16 * obj.anim.h))
 	local offset_cols = (obj.anim.id - (offset_rows * 16 * obj.anim.h)) / obj.anim.w
 	local offset = offset_rows * 8 + offset_cols
-	--local offset = (obj.anim.id / (obj.anim.w * obj.anim.h))
 	local sprite_id = ((obj.counter + offset) * obj.anim.w) % 16 + math.floor((obj.counter +offset) * obj.anim.w / 16) * 16 * obj.anim.h
-	spr(sprite_id, player.x, player.y, 0, 1, player.f, 0, obj.anim.w, obj.anim.h)
+	spr(sprite_id, player.x, player.y, 0, 1, player.flip, 0, obj.anim.w, obj.anim.h)
 	return obj.counter
 end
 
@@ -179,58 +173,14 @@ function gravity(obj)
 end
 
 -- collisions --
-function check_collision_x(obj)
-    if obj.dx > 0 then
-        local tr = mget((obj.x + obj.dx + obj.w)/8, (obj.y)/8)
-        local br = mget((obj.x + obj.dx + obj.w)/8, (obj.y + obj.h - 1)/8)
-        if fget(tr,0) or fget(br,0) then
-            obj.dx = (math.floor((obj.x + obj.dx + obj.w)/8)*8) - (obj.x + obj.w)
-        end
-    elseif obj.dx < 0 then
-        local tl = mget((obj.x + obj.dx - 1)/8, (obj.y)/8)
-        local bl = mget((obj.x + obj.dx - 1)/8, (obj.y + obj.h - 1)/8)
-        if fget(tl,0) or fget(bl,0) then
-            obj.dx = (math.ceil((obj.x + obj.dx - 1)/8)*8) - (obj.x)
-        end
-    end
-end
-
 function getMidpoint(p1, p2)
   local midX = math.floor((p1.x + p2.x) / 2)
   local midY = math.floor((p1.y + p2.y) / 2)
   return {x = midX, y = midY}
 end
 
-function check_collision_y(obj)
-    obj.on_ground = false
-    if obj.dy >= 0 then
-        local bl = mget((obj.x)/8, (obj.y + obj.dy + obj.h)/8)
-        local br = mget((obj.x + obj.w - 1)/8, (obj.y + obj.dy + obj.h)/8)
-        if fget(bl,0) or fget(br,0) then
-            obj.dy = (math.floor((obj.y + obj.dy + obj.h)/8)*8) - (obj.y + obj.h)
-            obj.on_ground = true
-        end
-    elseif obj.dy < 0 then
-        local tl0 = mget((obj.x)/8, (obj.y + obj.dy - 1)/8)
-        local tr0 = mget((obj.x + obj.w - 1)/8, (obj.y + obj.dy - 1)/8)
-        local tl1 = mget((obj.x)/8, (obj.y - 1)/8)
-        local tr1 = mget((obj.x + obj.w - 1)/8, (obj.y - 1)/8)
-		if fget(tl1,0) or fget(tr1,0) then
-            obj.dy = (math.ceil((obj.y - 1)/8)*8) - (obj.y)
-        elseif fget(tl0,0) or fget(tr0,0) then
-            obj.dy = (math.ceil((obj.y + obj.dy - 1)/8)*8) - (obj.y)
-        end
-    end
-
-    -- pix((obj.x), (obj.y + obj.dy + obj.h), 2)
-    -- pix((obj.x + obj.w - 1), (obj.y + obj.dy + obj.h), 2)
-    -- pix((obj.x), (obj.y + obj.dy - 1), 2)
-    -- pix((obj.x + obj.w - 1), (obj.y + obj.dy - 1), 2)
-end
-
-ox = 2
-
-function collision_new(obj)
+ox = 4
+function collision_x(obj)
     -- x axis --
     local top_left  = {x = (obj.x - 1 + ox + obj.dx),      y = (obj.y)}
     local top_right = {x = (obj.x + obj.w - ox + obj.dx),  y = (obj.y)}
@@ -239,72 +189,42 @@ function collision_new(obj)
     local mid_left  = getMidpoint(top_left,  bot_left)
     local mid_right = getMidpoint(top_right, bot_right)
 
-    pix(top_left.x,  top_left.y,  3)
-    pix(top_right.x, top_right.y, 3)
-    pix(bot_left.x,  bot_left.y,  3)
-    pix(bot_right.x, bot_right.y, 3)
-    pix(mid_left.x,  mid_left.y,  3)
-    pix(mid_right.x, mid_right.y, 3)
-
     if fget(mget(top_left.x/8, top_left.y/8),0) or
        fget(mget(mid_left.x/8, mid_left.y/8),0) or
        fget(mget(bot_left.x/8, bot_left.y/8),0) then
-        print("left", 0, 0)
-        -- pix(math.ceil(top_left.x/8)*8,  mid_left.y,  1)
-        -- pix((obj.x + ox),  mid_left.y,  1)
-        -- print(math.ceil(top_left.x/8)*8, 10, 50)
-        -- print((obj.x + ox), 30, 50)
-        -- print(math.ceil(top_left.x/8)*8 - (obj.x + ox), 50, 50)
-        --(obj.x - 1 + ox) math.ceil(top_left.x/8)*8
-        obj.dx = math.ceil(top_left.x/8)*8 - (obj.x + ox)
+		obj.dx = math.ceil(top_left.x/8)*8 - (obj.x + ox)
     end
 
     if fget(mget(top_right.x/8, top_right.y/8),0) or
        fget(mget(mid_right.x/8, mid_right.y/8),0) or
        fget(mget(bot_right.x/8, bot_right.y/8),0) then
-        print("right", 20, 0)
-
-        pix(math.floor(top_right.x/8)*8,  mid_right.y,  1)
-        pix((obj.x + obj.w - ox),  mid_right.y,  1)
-
-        print(math.floor(top_right.x/8)*8, 10, 50)
-        print((obj.x + obj.w - ox), 30, 50)
-        print(math.floor(top_right.x/8)*8 - (obj.x + obj.w - ox), 50, 50)
-
-        obj.dx = math.floor(top_right.x/8)*8 - (obj.x + obj.w - ox)
-        print( obj.dx, 70,50)
-        --obj.dx = 0
+        obj.dx = math.floor((top_right.x)/8)*8 - (obj.x + obj.w - ox)
     end
+end
 
+function collision_y(obj)
     -- y axis --
-    local top_left  = {x = (obj.x + ox),      y = (obj.y - 1 + obj.dy)}
+    local top_left  = {x = (obj.x + ox),      		 y = (obj.y - 1 + obj.dy)}
     local top_right = {x = (obj.x + obj.w -1 - ox),  y = (obj.y - 1 + obj.dy)}
-    local bot_left  = {x = (obj.x + ox),      y = (obj.y + obj.h + obj.dy)}
+    local bot_left  = {x = (obj.x + ox),      	     y = (obj.y + obj.h + obj.dy)}
     local bot_right = {x = (obj.x + obj.w -1 - ox),  y = (obj.y + obj.h + obj.dy)}
     local top_mid   = getMidpoint(top_left, top_right)
     local bot_mid   = getMidpoint(bot_left, bot_right)
 
-    pix(top_left.x,  top_left.y,  2)
-    pix(top_right.x, top_right.y, 2)
-    pix(bot_left.x,  bot_left.y,  2)
-    pix(bot_right.x, bot_right.y, 2)
-    pix(top_mid.x,   top_mid.y,   2)
-    pix(bot_mid.x,   bot_mid.y,   2)
-
     if fget(mget(top_left.x/8,  top_left.y/8),0) or
        fget(mget(top_mid.x/8,   top_mid.y/8),0) or
        fget(mget(top_right.x/8, top_right.y/8),0) then
-        print("up", 0, 20)
-        obj.dy = 0
+		obj.dy = math.ceil(top_mid.y/8)*8 - (obj.y)
     end
 
     if fget(mget(bot_left.x/8,  bot_left.y/8),0) or
        fget(mget(bot_mid.x/8,   bot_mid.y/8),0) or
        fget(mget(bot_right.x/8, bot_right.y/8),0) then
-        print("down", 20 ,20)
-        obj.dy = 0
-    end
-
+		player.on_ground = true
+		obj.dy = math.floor(bot_mid.y/8)*8 - (obj.y + obj.h)
+	else
+		player.on_ground = false
+	end
 end
 
 -- <TILES>
@@ -409,45 +329,34 @@ end
 -- 089:2220000042200000420000004200000040000000000000000000000000000000
 -- 090:0000002200000044000000440000004400000040000000400000004000000040
 -- 091:2220000022000000220000002000000000000000000000000000000000000000
--- 096:0000000000000000000000000000002200000222000022020000000200000002
--- 098:0000000000000000000022220000000000000000000000000000000200000022
--- 099:0000000000000000200000002000000020000000200000000000000000000000
--- 100:0000000000000000000002200000000200000000000000000000000000000000
--- 101:0000000000000000000000002000000002000000200000002000000022000000
--- 102:0000000000000000000000200000022000000200000002000000200200002222
--- 103:0000000000000000000000000000000000000000000000002000000020000000
--- 104:0000000000000000000000000000000200000002000000000000000000000000
--- 105:0000000000000000000000002200200000222000200000002200000002200000
--- 106:0000000000000000000000000000000000000022000022000000200000002000
--- 108:0000000000000000000000000000222200000000000000000000000000000000
--- 109:0000000000000000000000002000000002200000002000000020000000200000
--- 110:0000000000000000000000220000022000000200000002200000002200002222
--- 111:0000000000000000000000002200000002000000220000002000000022000000
--- 112:0000000200000002000000000000000000000000000000000000000000000000
--- 114:0000022000000200000002220000000000000000000000000000000000000000
--- 115:0000000000000000220000000000000000000000000000000000000000000000
--- 116:0000000000000000000002200000000200000000000000000000000000000000
--- 117:0220000002200000220000002000000000000000000000000000000000000000
--- 119:2000000020000000200000002000000000000000000000000000000000000000
--- 120:0000020000000220000000200000000200000000000000000000000000000000
--- 121:0020000000200000002000002220000000000000000000000000000000000000
--- 122:0000202200002220000002000000022200000002000000000000000000000000
--- 123:0000000020000000200000002000000020000000000000000000000000000000
--- 124:0000000000000000000000020000000000000000000000000000000000000000
--- 125:0020000000200000222200000020000002200000000000000000000000000000
--- 126:0000200000002000000022000000022000000002000000000000000000000000
--- 127:0220000000200000002000000200000020000000000000000000000000000000
--- 128:0000000000000000000022220000202200002022000022220000000200000000
--- 129:0000000000000000000000000000000000000000000000000000000020000000
--- 130:0000000000000000000000000000200000002000000020000000200000000200
--- 131:0000000000000000000000000000000022200000202200002002000020020000
--- 144:0000000000000000000020000000220200000022000000000000000000000000
--- 145:2000000020000000200000002000000000000000000000000000000000000000
--- 146:0000020000000200000002000000002000000020000000000000000000000000
--- 147:2002000020020000200200000222000000000000000000000000000000000000
+-- 096:0000000000000000000000500000005600000666000026660000222300002223
+-- 097:0000000000000000bb000000bbb00000bbb00000bb1000003000000030000000
+-- 098:0000000000000000000000000000000000000333000242330000442300004442
+-- 099:0000000000000000000000000000000033000000333bb00032bbbb00665bbb00
+-- 100:0000000000000000000200000022200400203334000003340000003300000000
+-- 101:0440000000400000440000004000000044000000444000004223000022220000
+-- 102:0000000000000000000044400000044000000044000000440001100406bb1104
+-- 103:0000000000000000002000000022000003200000433000004430000044300000
+-- 104:000000000000000000000000000bb00000bbbb0000bbbb330006633306666233
+-- 105:0000000000000000000000000000000000000000000444403044000033443300
+-- 106:0000000000000000000000bb00000bbb00000bbb000662bb0666623356000233
+-- 107:000000000000000000000000b0000000b1000000101100003002200030000000
+-- 112:0000223300004443000004440000000400000004000000040000000000000000
+-- 113:3300000033330000422000000020000000000000000000000000000000000000
+-- 114:0044440000004400000000000000000000000000000000000000000000000000
+-- 115:655bb10066611000600100000000000000000000000000000000000000000000
+-- 116:0000066600001666000016560000055b00000bbb000000bb0000000000000000
+-- 117:322200006222000062200000b0000000b0000000000000000000000000000000
+-- 118:066bb1325666b332050662220000222200000000000000000000000000000000
+-- 119:4440000024300000220000002000000000000000000000000000000000000000
+-- 120:5600012350000012000002200000000000000000000000000000000000000000
+-- 121:3444332224440002000000000000000000000000000000000000000000000000
+-- 122:0500002300000022000000040000000400000022000000200000000000000000
+-- 123:2000000043000000433000004330000044000000044000000440000004000000
 -- </SPRITES>
 
 -- <MAP>
+-- 001:000000000000000000001010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 -- 005:000000001010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 -- 006:000000001010101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 -- 007:000000000000000000000000000000000000000000101000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
