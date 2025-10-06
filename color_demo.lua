@@ -1,3 +1,10 @@
+-- title:   ticovania
+-- author:  kikolini studios
+-- desc:    metroidvania on tic80
+-- site:    not yet
+-- license: MIT License
+-- version: 0.2
+-- script:  lua
 
 -- global
 GRAVITY = 0.75
@@ -8,63 +15,6 @@ t=0
 
 game_state = "title"
 
--- animations --
-idle_animation = {
-	id = 256,
-	num = 8,
-	speed = 16,
-	counter = 0,
-	w = 2,
-	h = 2,
-	loop = 1,
-}
-run_animation = {
-	id = 288,
-	num = 8,
-	speed = 6,
-	counter = 0,
-	w = 2,
-	h = 2,
-	loop = 1,
-}
-jump_animation = {
-	id = 320,
-	num = 2,
-	speed = 4,
-	counter = 0,
-	w = 2,
-	h = 2,
-	loop = 1,
-}
-fall_animation = {
-	id = 324,
-	num = 4,
-	speed = 4,
-	counter = 0,
-	w = 2,
-	h = 2,
-	loop = 0,
-}
-
-jump2_animation = {
-	id = 352,
-	num = 6,
-	speed = 2,
-	counter = 0,
-	w = 2,
-	h = 2,
-	loop = 0,
-}
-test_animation = {
-	id = 34,
-	num = 1,
-	speed = 4,
-	counter = 0,
-	w = 2,
-	h = 2,
-	loop = 0,
-}
-
 player = {
 	x = 400,
 	y = 24,
@@ -72,8 +22,8 @@ player = {
 	h = 16,
 	dx = 0,
 	dy = 0,
-	s = 2,
-    j = 6,
+	speed = 2,
+    jump  = 6,
     on_ground = false,
 	anim = idle_animation,
 	state = "idle",
@@ -91,44 +41,27 @@ camera = {
 	y = 0,
 }
 
-function update_camera()
-    -- center camera on player
-    camera.x = player.x - 120  -- 240 / 2
-    --camera.y = player.y - 68   -- 136 / 2
-
-    -- clamp camera to map bounds
-    camera.x = math.max(0, math.min(camera.x, (240*8)-240))
-    --camera.y = math.max(0, math.min(camera.y, (136*8)-136))
-end
-
 function TIC()
 	if game_state == "title" then
-		menu_draw()
-		if btnp(4) then
-			player_init()
-			game_state = "loading"
-			now = t
-		end
+		draw_title()
 	elseif game_state == "loading" then
-		draw_curtains()
-	else
-		cls()
-		draw_map()
-
-		if player.hp > 0 or player.dmg_cd > 0 then
-			update_player()
-			player.counter = draw_object(player)
-			--debug(player)
-		else 
-			game_state = "title"
-			sync(0,0,flase)
-		end
-		draw_ui()
+		draw_loading()
+	elseif game_state == "game" then
+		draw_game()
 	end
 	t=t+1
 end
 
-function draw_curtains()
+function draw_title()
+	map(0,0,30,17,0,0,-1,1)
+	if btnp(4) then
+		player_init()
+		game_state = "loading"
+		now = t
+	end
+end
+
+function draw_loading()
 	local d = 80
 	local y = 0
 
@@ -153,14 +86,30 @@ function draw_curtains()
 	end
 end
 
-function player_init()
-	player.x = 400
-	player.y = 24
-	player.hp = 3
+function draw_game()
+	cls()
+	draw_map()
+	if player.hp > 0 or player.dmg_cd > 0 then
+		player_update()
+		player_draw()
+	else
+		player_init()
+		game_state = "loading"
+		now = t
+	end
+	draw_ui()
+end
+
+function camera_update()
+    camera.x = player.x - 120  -- 240 / 2
+    --camera.y = player.y - 68   -- 136 / 2
+
+    camera.x = math.max(0, math.min(camera.x, (240*8)-240))
+    --camera.y = math.max(0, math.min(camera.y, (136*8)-136))
 end
 
 function draw_map()
-	update_camera()
+	camera_update()
 	local map_x = math.floor(camera.x / 8)
 	local map_y = math.floor(camera.y / 8)
 	local offset_x = -(camera.x % 8)
@@ -168,8 +117,19 @@ function draw_map()
 	map(map_x, map_y, 31, 18, offset_x, offset_y)
 end
 
-function menu_draw()
-	map(0,0,30,17,0,0,-1,1)
+function draw_ui()
+	for i = 0, player.hp - 1, 1 do
+		spr(240, 1 + i*9, 1, 1)
+	end
+	if player.dmg_cd > 0 and player.dmg_cd % 1.5 ==0 then
+		spr(240, 1 + player.hp*9, 1, 1)
+	end
+end
+
+function player_init()
+	player.x = 400
+	player.y = 24
+	player.hp = 3
 end
 
 function player_input()
@@ -177,17 +137,32 @@ function player_input()
 	if (btnp(0) or btnp(4)) and 
     player.jumps < player.max_jumps then
         player.jumps = player.jumps + 1
-		player.dy = -player.j 
+		player.dy = -player.jump 
 	end
-    ---if btn(0) then player.dy = -player.s end
-	if btn(1) then player.dy = player.s end
-	if btn(2) then player.dx = -player.s end
-	if btn(3) then player.dx = player.s end
+    ---if btn(0) then player.dy = -player.speed end
+	if btn(1) then player.dy =  player.speed end
+	if btn(2) then player.dx = -player.speed end
+	if btn(3) then player.dx =  player.speed end
+end
+
+function player_draw()
+	if player.state == "idle" then
+		player.anim = idle_animation
+	elseif player.state == "run" then
+		player.anim = run_animation
+	elseif player.state == "jump" then
+		player.anim = jump_animation
+    elseif player.state == "fall" then
+        player.anim = fall_animation
+    elseif player.state == "double_jump" then
+        player.anim = jump2_animation
+    end
+
+	player.counter = draw_object(player)
 end
 
 function player_states()
 	local new_state = ""
-
 	if player.on_ground == false then
         if player.dy > 1 then 
             new_state = "fall"
@@ -208,17 +183,6 @@ function player_states()
 	if player.state ~= new_state then
         player.counter = 0
         player.state = new_state
-		if new_state == "idle" then
-			player.anim = idle_animation
-		elseif new_state == "run" then
-			player.anim = run_animation
-		elseif new_state == "jump" then
-			player.anim = jump_animation
-        elseif new_state == "fall" then
-            player.anim = fall_animation
-        elseif new_state == "double_jump" then
-            player.anim = jump2_animation
-        end
 	end
 
 	if player.dx < 0 then
@@ -226,16 +190,20 @@ function player_states()
 	elseif player.dx > 0 then
 		player.flip = 0
 	end
-
 end
 
-function draw_ui()
-	for i = 0, player.hp - 1, 1 do
-		spr(240, 1 + i*9, 1, 1)
-	end
-	if player.dmg_cd > 0 and player.dmg_cd % 1.5 ==0 then
-		spr(240, 1 + player.hp*9, 1, 1)
-	end
+function player_update()
+    player_input()
+	gravity(player)
+
+	collision_x(player)
+	player.x = player.x + player.dx
+	collision_y(player)
+	player.y = player.y + player.dy
+	
+	check_env(player)
+	player_states()
+
 end
 
 function debug(obj)
@@ -339,24 +307,6 @@ function check_env(obj)
 			obj.dmg_cd = obj.dmg_cd - 1
 		end
 	end
-end
-
-function update_player()
-    player_input()
-	gravity(player)
-
-	collision_x(player)
-	player.x = player.x + player.dx
-	collision_y(player)
-	player.y = player.y + player.dy
-	
-	check_env(player)
-
-	--print(get_flag(player, "down", 1), 10, 20)
-	
-
-    player_states()
-
 end
 
 function draw_object(obj)
@@ -471,6 +421,73 @@ function collision_y(obj)
 		player.on_ground = false
 	end
 end
+
+-- animations --
+idle_animation = {
+	id = 256,
+	num = 8,
+	speed = 16,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 1,
+}
+run_animation = {
+	id = 288,
+	num = 8,
+	speed = 6,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 1,
+}
+jump_animation = {
+	id = 320,
+	num = 2,
+	speed = 4,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 1,
+}
+jump2_animation = {
+	id = 320,
+	num = 2,
+	speed = 4,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 1,
+}
+
+fall_animation = {
+	id = 324,
+	num = 4,
+	speed = 4,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 0,
+}
+
+-- jump2_animation = {
+-- 	id = 352,
+-- 	num = 6,
+-- 	speed = 2,
+-- 	counter = 0,
+-- 	w = 2,
+-- 	h = 2,
+-- 	loop = 0,
+-- }
+test_animation = {
+	id = 34,
+	num = 1,
+	speed = 4,
+	counter = 0,
+	w = 2,
+	h = 2,
+	loop = 0,
+}
 
 -- <TILES>
 -- 000:4444444444444040444004404404004444004400404044004444004440040044
