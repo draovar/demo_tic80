@@ -152,7 +152,7 @@ function player_input()
 		player.jumps = player.jumps + 1
 		player.dy = -player.jump
 		if player.state == "wall" then
-			player.jumps = player.jumps - 1
+			--player.jumps = player.jumps - 1
 			player.wall = player.flip
 			player.dx = - (player.speed - 2*player.flip*player.speed)
 		end
@@ -222,10 +222,9 @@ function player_states()
 	elseif player.dy >= 0 and player.on_ground == false then
 		if (get_flag(player, "right", 2) 
 		or get_flag(player, "left", 2))
-		--and player.dx ~= 0
 		and player.wall ~= player.flip then
 			new_state = "wall"
-			--player.jumps = 0
+			player.jumps = 1
 		else
         	new_state = "fall"
 		end
@@ -1542,4 +1541,3 @@ test_animation = {
 -- <PALETTE2>
 -- 000:280c145f3a60876672c2b2aaece8de6db7c35e80b2627057859d4cbac63ef7d554e8bf92e78c5bba6f5ec338467a3942
 -- </PALETTE2>
-
