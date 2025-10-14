@@ -60,6 +60,70 @@ player = {
 	wall = -1,
 }
 
+enemies = {}
+
+function spawn_patroller(x,y)
+  table.insert(enemies, 
+  {x=x, y=y, w=16, h=16, dx=0.5, dy=0, dir=1, left=x-64, right=x+64, hp=2, alive=true, ox=0, flip = 0})
+end
+
+function enemy_update(e)
+  -- patrol bounds
+  if e.x < e.left then e.dir = 1 end
+  if e.x > e.right then e.dir = -1 end
+  e.dx = 0.5 * e.dir
+
+  -- basic gravity + tile stop (reuse your helpers)
+  e.dy = math.min(e.dy + GRAVITY, 7)
+  -- x collide
+  local savedx = e.dx
+  collision_x(e)
+  e.x = e.x + e.dx
+  -- y collide
+  collision_y(e)
+  e.y = e.y + e.dy
+  if e.dx == 0 then e.dir = -e.dir end -- bounced on wall
+
+  -- hurt player on touch (only if player not invuln)
+  if e.alive and player.dmg_cd == 0 and aabb(e, player) then
+    player.hp = player.hp - 1
+    player.dmg_cd = 60
+    player.dx = (player.x < e.x) and -2 or 2
+    player.dy = -3
+  end
+end
+
+function enemy_draw(e)
+	if e.alive then
+    -- pick any small sprite you like; using 240 as placeholder heart implies change it
+	local spr_num = 400
+	if (t % 32 < 16) then spr_num = spr_num + 2 end
+	if e.dx > 0 then e.flip = 0 end
+	if e.dx < 0 then e.flip = 1 end
+
+    spr(spr_num, e.x - camera.x, e.y, 5, 1, e.flip, 0, 2, 2)
+	end
+end
+
+function aabb(a,b)
+  return a.x < b.x + b.w and b.x < a.x + a.w and
+         a.y < b.y + b.h and b.y < a.y + a.h
+end
+
+function player_attack_hitbox()
+  local f = player.anim_counter
+  if f == 0 then
+    return { x = player.x + 18*player.flip - 4, y = player.y + 4, w = 8, h = 8 }
+  elseif f == 1 then
+    return { x = player.x - 9 + 18*player.flip, y = player.y, w = 16, h = 8 }
+  elseif f == 2 then
+    return { x = player.x + 7 - 6*player.flip, y = player.y - 4, w = 16, h = 12 }
+  elseif f == 3 then
+    return { x = player.x + 4, y = player.y + 8, w = 8, h = 8 }
+  end
+  return nil
+end
+
 -- animations
 local ANIM = {
   [ST.IDLE]   = {id=256, num=4,  speed=16, w=2, h=2, type=2},
@@ -69,7 +133,7 @@ local ANIM = {
   [ST.DEATH]  = {id=264, num=4,  speed=16, w=2, h=2, type=0},
   [ST.CRAWL]  = {id=364, num=1,  speed=2,  w=2, h=2, type=0},
   [ST.WALL]   = {id=366, num=1,  speed=2,  w=2, h=2, type=0},
-  [ST.ATTACK] = {id=328, num=4,  speed=8,  w=2, h=2, type=1},
+  [ST.ATTACK] = {id=328, num=4,  speed=6,  w=2, h=2, type=1},
 }
 
 function TIC()
@@ -134,7 +198,13 @@ function draw_game()
 	else
 		cls()
 		draw_map()
+		for _, e in ipairs(enemies) do
+			enemy_update(e)
+		end
 		player_update()
+		for _, e in ipairs(enemies) do
+			enemy_draw(e)
+		end
 		player_draw()
 		draw_ui()	
 	end	
@@ -169,6 +239,9 @@ function game_init()
 	player.y = 24
 	player.hp = 3
 	player.state = ST.IDLE
+	enemies = {}
+	--spawn_patroller(440, 32)
+	spawn_patroller(520, 32)
 end
 
 function player_input()
@@ -208,10 +281,12 @@ function draw_attack()
 end
 
 function player_draw()
-	player.anim = ANIM[player.state]
-	player.anim_counter = draw_object(player)
-	if player.state == ST.ATTACK then
-		draw_attack()
+	if (player.dmg_cd == 0) or player.state == ST.DEATH or(t % 6 < 2) then
+		player.anim = ANIM[player.state]
+		player.anim_counter = draw_object(player)
+		if player.state == ST.ATTACK then
+			draw_attack()
+		end
 	end
 end
 
@@ -270,6 +345,20 @@ function player_update()
 	player.x = player.x + player.dx
 	collision_y(player)
 	player.y = player.y + player.dy
+
+	if player.state == ST.ATTACK then
+	local hb = player_attack_hitbox()
+		if hb then
+			for _, e in ipairs(enemies) do
+				if e.alive and aabb(hb, e) then
+					e.hp = e.hp - 1
+					e.dx = (player.flip==0) and 1.5 or -1.5
+					e.dy = -1.5
+					if e.hp <= 0 then e.alive = false end
+				end
+			end
+		end
+	end
 
 	if player.dmg_cd > 0 then
 		player.dmg_cd = player.dmg_cd - 1
@@ -979,14 +1068,14 @@ end
 -- 141:5555555555555555555555555555555555555555555555555555555555555555
 -- 142:5555555555555555555555555555555555555555555555555555555555555555
 -- 143:5555555555555555555555555555555555555555555555555555555555555555
--- 144:5555555555555555555555555555555555555555555555555555555555555555
--- 145:5555555555555555555555555555555555555555555555555555555555555555
--- 146:5555555555555555555555555555555555555555555555555555555555555555
--- 147:5555555555555555555555555555555555555555555555555555555555555555
--- 148:5555555555555555555555555555555555555555555555555555555555555555
--- 149:5555555555555555555555555555555555555555555555555555555555555555
--- 150:5555555555555555555555555555555555555555555555555555555555555555
--- 151:5555555555555555555555555555555555555555555555555555555555555555
+-- 144:5555555555555557555555785555578855555799555557995555578855555578
+-- 145:7777755598888755888488758884888788888887987777758875555588977555
+-- 146:5555555755555579555557885555788855557998555579995555788855555788
+-- 147:7777555588887555884887558848887588888875877777558755555589775555
+-- 148:5555555555555555555555555555555555555555555555005555009955508999
+-- 149:555555555555555555555555555555555555555500555555aa005555aaaa0555
+-- 150:5555555555555555555555555555555555555555555555555555550055550099
+-- 151:55555555555555555555555555555555555555555555555500555555aa005555
 -- 152:5555555555555555555555555555555555555555555555555555555555555555
 -- 153:5555555555555555555555555555555555555555555555555555555555555555
 -- 154:5555555555555555555555555555555555555555555555555555555555555555
@@ -995,14 +1084,14 @@ end
 -- 157:5555555555555555555555555555555555555555555555555555555555555555
 -- 158:5555555555555555555555555555555555555555555555555555555555555555
 -- 159:5555555555555555555555555555555555555555555555555555555555555555
--- 160:5555555555555555555555555555555555555555555555555555555555555555
--- 161:5555555555555555555555555555555555555555555555555555555555555555
--- 162:5555555555555555555555555555555555555555555555555555555555555555
--- 163:5555555555555555555555555555555555555555555555555555555555555555
--- 164:5555555555555555555555555555555555555555555555555555555555555555
--- 165:5555555555555555555555555555555555555555555555555555555555555555
--- 166:5555555555555555555555555555555555555555555555555555555555555555
--- 167:5555555555555555555555555555555555555555555555555555555555555555
+-- 160:5555555755555555555555555755557778755788788778885798897755777755
+-- 161:8988875578889875577988877557888797789987989888757889775557775555
+-- 162:5555555755555555555555555557775557788877788779887875778857555577
+-- 163:8988875578889875577988875577888778989987988888759779775577775555
+-- 164:5508999a5508999a5508999a5088899950788899507788895007778855000000
+-- 165:aaaaa0550aa0a0550aa0a055aaaaaa059aaaa905999999058999900500000055
+-- 166:555099995508999a5508999a5508999a50788999507788895007778855000000
+-- 167:aaaa0555aaaaa0550aa0a0550aa0a005aaaaaa0599aaa9058999900500000055
 -- 168:5555555555555555555555555555555555555555555555555555555555555555
 -- 169:5555555555555555555555555555555555555555555555555555555555555555
 -- 170:5555555555555555555555555555555555555555555555555555555555555555
