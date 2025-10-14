@@ -284,10 +284,14 @@ function player_draw()
 	if (player.dmg_cd == 0) or player.state == ST.DEATH or(t % 6 < 2) then
 		player.anim = ANIM[player.state]
 		player.anim_counter = draw_object(player)
-		if player.state == ST.ATTACK then
+		if player.state == ST.DEATH then
+			print("YOU DIED!", 74, 62, 14, false, 2)
+			print("YOU DIED!", 75, 63, 15, false, 2)
+		elseif player.state == ST.ATTACK then
 			draw_attack()
 		end
 	end
+	
 end
 
 function player_enter(state)
@@ -1520,3 +1524,4 @@ end
 -- <PALETTE2>
 -- 000:280c145f3a60876672c2b2aaece8de6db7c35e80b2627057859d4cbac63ef7d554e8bf92e78c5bba6f5ec338467a3942
 -- </PALETTE2>
+
