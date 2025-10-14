@@ -3,20 +3,39 @@
 -- desc:    metroidvania on tic80
 -- site:    not yet
 -- license: MIT License
--- version: 0.3
+-- version: 0.4
 -- script:  lua
 
--- global
-GRAVITY = 0.70
-FRICTION = 0.75
-AIR = 0.90
-MAX_SEED = 6
-t=0
+-- constants
+local SCREEN_W, SCREEN_H = 240, 136
+local TILE = 8
+local GRAVITY = 0.70
+local FRICTION = 0.75
+local AIR = 0.90
 
-states = {idle=1,run=2,jump=3,fall=4,wall=5,crawl=6,attack=7,death=8}
+-- flags used in map (set these to match your sprite flags)
+local FLAG_SOLID  = 0  -- fget(...,0)
+local FLAG_HAZARD = 1  -- bit 1 value 2
+local FLAG_WALL   = 2  -- bit 2 value 4 (for wall slide)
 
-game_state = "title"
+-- time
+local t = 0
+local now = 0
 
+-- camera
+local camera = { x=0, y=0 }
+
+-- state enum
+ST = {NONE=0,IDLE=1,RUN=2,JUMP=3,FALL=4,WALL=5,CRAWL=6,ATTACK=7,DEATH=8}
+
+-- game state machine
+local game_state = "title"
+local next_state = "game"
+
+-- input env (bitfields for 8 flags around the player)
+local env = { up=0, down=0, left=0, right=0 }
+
+-- player
 player = {
 	x = 400,
 	y = 24,
@@ -25,32 +44,33 @@ player = {
 	dx = 0,
 	dy = 0,
 	speed = 2,
-    jump  = 6,
-    on_ground = false,
+	jump  = 6,
+	on_ground = false,
 	anim = idle_animation,
-	state = "idle",
-	action = "none",
+	state = ST.IDLE,
+	action = ST.NONE,
 	anim_counter = 0,
 	anim_loop = 1,
 	flip = 0,
-    jumps = 0,
-    max_jumps = 2,
+	jumps = 0,
+	max_jumps = 2,
 	dmg_cd = 0,
 	hp = 3,
 	ox = 4,
 	wall = -1,
 }
 
-camera = {
-	x = 0,
-	y = 0,
+-- animations
+local ANIM = {
+  [ST.IDLE]   = {id=256, num=4,  speed=16, w=2, h=2, type=2},
+  [ST.RUN]    = {id=288, num=6,  speed=6,  w=2, h=2, type=1},
+  [ST.JUMP]   = {id=300, num=2,  speed=4,  w=2, h=2, type=1},
+  [ST.FALL]   = {id=320, num=4,  speed=2,  w=2, h=2, type=0},
+  [ST.DEATH]  = {id=264, num=4,  speed=16, w=2, h=2, type=0},
+  [ST.CRAWL]  = {id=364, num=1,  speed=2,  w=2, h=2, type=0},
+  [ST.WALL]   = {id=366, num=1,  speed=2,  w=2, h=2, type=0},
+  [ST.ATTACK] = {id=328, num=4,  speed=8,  w=2, h=2, type=1},
 }
-
-env = {}
-env["up"]    = 0
-env["down"]  = 0
-env["left"]  = 0
-env["right"] = 0
 
 function TIC()
 	if game_state == "title" then
@@ -148,7 +168,7 @@ function game_init()
 	player.x = 400
 	player.y = 24
 	player.hp = 3
-	player.state = "idle"
+	player.state = ST.IDLE
 end
 
 function player_input()
@@ -160,18 +180,16 @@ function player_input()
     player.jumps < player.max_jumps then
 		player.jumps = player.jumps + 1
 		player.dy = -player.jump
-		if player.state == "wall" then
-			--player.jumps = player.jumps - 1
-			player.wall = player.flip
+		if player.state == ST.WALL then
 			player.dx = - (player.speed - 2*player.flip*player.speed)
 		end
 	end
 
 	if btn(1) and player.dx == 0 and player.dy == 0 then 
-		player.action = "crawl" 
+		player.action = ST.CRAWL
 	end
 	if btn(5) then
-		player.action = "attack"
+		player.action = ST.ATTACK
 	end
 
 end
@@ -190,69 +208,41 @@ function draw_attack()
 end
 
 function player_draw()
-	if player.state == "idle" then
-		player.anim = idle_animation
-	elseif player.state == "run" then
-		player.anim = run_animation
-	elseif player.state == "jump" then
-		player.anim = jump_animation
-    elseif player.state == "fall" then
-        player.anim = fall_animation
-    elseif player.state == "double_jump" then
-        player.anim = jump2_animation
-    elseif player.state == "crawl" then
-        player.anim = crawl_animation
-    elseif player.state == "wall" then
-        player.anim = wall_animation
-    elseif player.state == "attack" then
-        player.anim = attack_animation
-	elseif player.state == "death" then
-		print("YOU DIED!", 74, 62, 14, false, 2)
-		print("YOU DIED!", 75, 63, 15, false, 2)
-		player.anim = death_animation
-	end
+	player.anim = ANIM[player.state]
 	player.anim_counter = draw_object(player)
-	if player.state == "attack" then
+	if player.state == ST.ATTACK then
 		draw_attack()
 	end
+	print(player.wall, 10,10)
 end
 
+function player_enter(state)
+	if player.state == ST.WALL then
+		player.wall = player.flip
+	end
+	player.state = state
+	player.anim_counter = 0
+	player.anim_loop = 1
+end
+
+function want_wall()
+	return (env.left & (1<<2) ~= 0 or env.right & (1<<2) ~= 0) --and player.wall ~= player.flip
+end
 
 function player_states()
-    new_state = ""
-    if player.hp <= 0 then
-        new_state = "death"
-    elseif player.action ~= "none" then
-		new_state = player.action
-		player.action = "none"
-	elseif player.dy >= 0 and player.on_ground == false then
-		if ((env["left"] & math.pow(2,2)) > 0
-		or (env["right"] & math.pow(2,2)) > 0)
-		and player.wall ~= player.flip then
-			new_state = "wall"
+	if player.hp <= 0 then return ST.DEATH end
+	if player.action == ST.ATTACK then player.action = ST.NONE return ST.ATTACK end
+	if player.action == ST.CRAWL then player.action = ST.NONE return ST.CRAWL end
+	if player.dy < 0 then return ST.JUMP end
+	if not player.on_ground then
+		if want_wall() and player.wall ~= player.flip then 
 			player.jumps = 1
-		else
-        	new_state = "fall"
+			return ST.WALL
 		end
-    elseif player.dy < 0 then
-        new_state = "jump"
-    elseif player.dx ~= 0 then
-        new_state = "run"
-	else
-		new_state = "idle"
+		return ST.FALL
 	end
-
-    if player.dx < 0 then
-		player.flip = 1
-	elseif player.dx > 0 then
-		player.flip = 0
-	end
-
-    if player.state ~= new_state then
-        player.anim_counter = 0
-        player.state = new_state
-		player.anim_loop = 1
-	end
+	if player.dx ~= 0 then return ST.RUN end
+	return ST.IDLE
 end
 
 function player_update()
@@ -260,9 +250,12 @@ function player_update()
 		player.jumps = 0
 		player.wall = -1
 	end
-	if player.state ~= "death" then 
+	if player.state ~= ST.DEATH then 
 		player_input()
-		player_states()
+		local new_state = player_states()
+		if new_state ~= player.state then player_enter(new_state) end
+		if player.dx < 0 then player.flip = 1
+		elseif player.dx > 0 then player.flip = 0 end
 		check_env(player)
 	end
 
@@ -275,31 +268,6 @@ function player_update()
 	if player.dmg_cd > 0 then
 		player.dmg_cd = player.dmg_cd - 1
 	end    
-end
-
-function debug(obj)
-	local top_left  = {x = (obj.x + obj.ox),             y = (obj.y)}
-	local bot_left  = {x = (obj.x + obj.ox),             y = (obj.y + obj.h - 1)}
-	local top_right = {x = (obj.x + obj.w - 1 - obj.ox), y = (obj.y)}
-	local bot_right = {x = (obj.x + obj.w - 1 - obj.ox), y = (obj.y + obj.h - 1)}
-
-	local mid_left  = getMidpoint(top_left,  bot_left)
-	local mid_right = getMidpoint(top_right, bot_right)
-	local mid_top   = getMidpoint(top_left, top_right)
-	local mid_bot   = getMidpoint(bot_left, bot_right)
-
-	pix(top_left.x, top_left.y, 14)
-	pix(bot_left.x, bot_left.y, 14)
-	pix(top_right.x, top_right.y, 14)
-	pix(bot_right.x, bot_right.y, 14)
-
-	pix(mid_left.x, mid_left.y, 14)
-	pix(mid_right.x, mid_right.y, 14)
-	pix(mid_top.x, mid_top.y, 14)
-	pix(mid_bot.x, mid_bot.y, 14)
-
-	print("x = " .. obj.x, 0, 0)
-	print("y = " .. obj.y, 0, 10)
 end
 
 function get_flags(obj)
@@ -406,7 +374,7 @@ end
 
 function gravity(obj)
     if obj.on_ground == false then
-		if obj.state == 'wall' then
+		if obj.state == ST.WALL then
 			obj.dy = math.min(obj.dy + 0.1, 0.4)
 		else
 			obj.dy = math.min(obj.dy + GRAVITY, 7)
@@ -477,94 +445,6 @@ function collision_y(obj)
 		obj.on_ground = false
 	end
 end
-
--- animations --
-idle_animation = {
-	id = 256,
-	num = 4,
-	speed = 16,
-	w = 2,
-	h = 2,
-	type = 2,
-}
-run_animation = {
-	id = 288,
-	num = 6,
-	speed = 6,
-	w = 2,
-	h = 2,
-	type = 1,
-}
-jump_animation = {
-	id = 300,
-	num = 2,
-	speed = 4,
-	w = 2,
-	h = 2,
-	type = 1,
-}
-jump2_animation = {
-	id = 300,
-	num = 2,
-	speed = 2,
-	w = 2,
-	h = 2,
-	type = 1,
-}
-
-fall_animation = {
-	id = 320,
-	num = 4,
-	speed = 2,
-	w = 2,
-	h = 2,
-	type = 0,
-}
-
-death_animation = {
-	id = 264,
-	num = 4,
-	speed = 16,
-	w = 2,
-	h = 2,
-	type = 0,
-}
-
-crawl_animation = {
-	id = 364,
-	num = 1,
-	speed = 2,
-	w = 2,
-	h = 2,
-	type = 0,
-}
-
-wall_animation = {
-	id = 366,
-	num = 1,
-	speed = 2,
-	w = 2,
-	h = 2,
-	type = 0,
-}
-
-attack_animation = {
-	id = 328,
-	num = 4,
-	speed = 8,
-	w = 2,
-	h = 2,
-	type = 1,
-}
-
-test_animation = {
-	id = 34,
-	num = 1,
-	speed = 4,
-	w = 2,
-	h = 2,
-	type = 0,
-}
 
 -- <TILES>
 -- 000:4444444444444040444004404404004444004400404044004444004440040044
@@ -1544,3 +1424,4 @@ test_animation = {
 -- <PALETTE2>
 -- 000:280c145f3a60876672c2b2aaece8de6db7c35e80b2627057859d4cbac63ef7d554e8bf92e78c5bba6f5ec338467a3942
 -- </PALETTE2>
+
