@@ -62,78 +62,73 @@ player = {
 
 enemies = {}
 
-function spawn_patroller(x,y)
-  table.insert(enemies, 
-  {x=x, y=y, w=16, h=16, dx=0.5, dy=0, dir=1, left=x-64, right=x+64, hp=2, alive=true, ox=0, flip = 0})
+function aabb(a,b)
+	return a.x < b.x + b.w and b.x < a.x + a.w and
+		   a.y < b.y + b.h and b.y < a.y + a.h
 end
 
-function enemy_update(e)
-  -- patrol bounds
-  if e.x < e.left then e.dir = 1 end
-  if e.x > e.right then e.dir = -1 end
-  e.dx = 0.5 * e.dir
+function spawn_patroller(x,y, left, right)
+	table.insert(enemies, 
+	{x=x, y=y, w=16, h=16, dx=0.5, dy=0, dir=1, left=left, right=right, hp=2, alive=true, ox=0, flip=0})
+end
 
-  -- basic gravity + tile stop (reuse your helpers)
-  e.dy = math.min(e.dy + GRAVITY, 7)
-  -- x collide
-  local savedx = e.dx
-  collision_x(e)
-  e.x = e.x + e.dx
-  -- y collide
-  collision_y(e)
-  e.y = e.y + e.dy
-  if e.dx == 0 then e.dir = -e.dir end -- bounced on wall
+function enemy_update(enemy)
+	if enemy.left ~= 0 and enemy.right ~0 then
+		if enemy.x < enemy.left then enemy.dir = 1 end
+		if enemy.x > enemy.right then enemy.dir = -1 end
+	end
 
-  -- hurt player on touch (only if player not invuln)
-  if e.alive and player.dmg_cd == 0 and aabb(e, player) then
-    player.hp = player.hp - 1
-    player.dmg_cd = 60
-    player.dx = (player.x < e.x) and -2 or 2
-    player.dy = -3
-  end
+	enemy.dx = 0.5 * enemy.dir
+	enemy.dy = math.min(enemy.dy + GRAVITY, 7)
+
+	collision_x(enemy)
+	enemy.x = enemy.x + enemy.dx
+	collision_y(enemy)
+	enemy.y = enemy.y + enemy.dy
+	if enemy.dx == 0 then enemy.dir = -enemy.dir end -- bounced on wall
+
+	if enemy.alive and player.dmg_cd == 0 and aabb(enemy, player) then
+		player.hp = player.hp - 1
+		player.dmg_cd = 60
+		player.dx = (player.x < enemy.x) and -2 or 2
+		player.dy = -3
+	end
 end
 
 function enemy_draw(e)
 	if e.alive then
-    -- pick any small sprite you like; using 240 as placeholder heart implies change it
-	local spr_num = 400
-	if (t % 32 < 16) then spr_num = spr_num + 2 end
-	if e.dx > 0 then e.flip = 0 end
-	if e.dx < 0 then e.flip = 1 end
-
-    spr(spr_num, e.x - camera.x, e.y, 5, 1, e.flip, 0, 2, 2)
+		local spr_num = 400
+		if (t % 32 < 16) then spr_num = spr_num + 2 end
+		if e.dx > 0 then e.flip = 0 end
+		if e.dx < 0 then e.flip = 1 end
+    	spr(spr_num, e.x - camera.x, e.y, 5, 1, e.flip, 0, 2, 2)
 	end
 end
 
-function aabb(a,b)
-  return a.x < b.x + b.w and b.x < a.x + a.w and
-         a.y < b.y + b.h and b.y < a.y + a.h
-end
-
 function player_attack_hitbox()
-  local f = player.anim_counter
-  if f == 0 then
-    return { x = player.x + 18*player.flip - 4, y = player.y + 4, w = 8, h = 8 }
-  elseif f == 1 then
-    return { x = player.x - 9 + 18*player.flip, y = player.y, w = 16, h = 8 }
-  elseif f == 2 then
-    return { x = player.x + 7 - 6*player.flip, y = player.y - 4, w = 16, h = 12 }
-  elseif f == 3 then
-    return { x = player.x + 4, y = player.y + 8, w = 8, h = 8 }
-  end
-  return nil
+	local f = player.anim_counter
+	if f == 0 then
+    	return { x = player.x + 18*player.flip - 4, y = player.y + 4, w = 8, h = 8 }
+	elseif f == 1 then
+    	return { x = player.x - 9 + 18*player.flip, y = player.y, w = 16, h = 8 }
+	elseif f == 2 then
+    	return { x = player.x + 7 - 6*player.flip, y = player.y - 4, w = 16, h = 12 }
+	elseif f == 3 then
+    	return { x = player.x + 4, y = player.y + 8, w = 8, h = 8 }
+  	end
+	return nil
 end
 
 -- animations
 local ANIM = {
-  [ST.IDLE]   = {id=256, num=4,  speed=16, w=2, h=2, type=2},
-  [ST.RUN]    = {id=288, num=6,  speed=6,  w=2, h=2, type=1},
-  [ST.JUMP]   = {id=300, num=2,  speed=4,  w=2, h=2, type=1},
-  [ST.FALL]   = {id=320, num=2,  speed=2,  w=2, h=2, type=0},
-  [ST.DEATH]  = {id=264, num=4,  speed=16, w=2, h=2, type=0},
-  [ST.CRAWL]  = {id=364, num=1,  speed=2,  w=2, h=2, type=0},
-  [ST.WALL]   = {id=366, num=1,  speed=2,  w=2, h=2, type=0},
-  [ST.ATTACK] = {id=328, num=4,  speed=6,  w=2, h=2, type=1},
+	[ST.IDLE]   = {id=256, num=4,  speed=16, w=2, h=2, type=2},
+	[ST.RUN]    = {id=288, num=6,  speed=6,  w=2, h=2, type=1},
+	[ST.JUMP]   = {id=300, num=2,  speed=4,  w=2, h=2, type=1},
+	[ST.FALL]   = {id=320, num=2,  speed=2,  w=2, h=2, type=0},
+	[ST.DEATH]  = {id=264, num=4,  speed=16, w=2, h=2, type=0},
+	[ST.CRAWL]  = {id=364, num=1,  speed=2,  w=2, h=2, type=0},
+	[ST.WALL]   = {id=366, num=1,  speed=2,  w=2, h=2, type=0},
+	[ST.ATTACK] = {id=328, num=4,  speed=6,  w=2, h=2, type=1},
 }
 
 function TIC()
@@ -241,7 +236,7 @@ function game_init()
 	player.state = ST.IDLE
 	enemies = {}
 	--spawn_patroller(440, 32)
-	spawn_patroller(520, 32)
+	spawn_patroller(520, 32, 0, 0)
 end
 
 function player_input()
@@ -1524,4 +1519,3 @@ end
 -- <PALETTE2>
 -- 000:280c145f3a60876672c2b2aaece8de6db7c35e80b2627057859d4cbac63ef7d554e8bf92e78c5bba6f5ec338467a3942
 -- </PALETTE2>
-
